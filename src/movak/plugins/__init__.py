@@ -1,0 +1,1 @@
+"""Plugin support for Movak."""
