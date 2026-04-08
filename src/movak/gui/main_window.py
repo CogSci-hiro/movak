@@ -69,7 +69,10 @@ class MainWindow(QMainWindow):
         self.review_queue_pane = ReviewQueuePane(self.window_frame)
         self.search_pane = SearchPane(self.window_frame)
         self.export_pane = ExportPane(self.window_frame)
-        self.timeline_panel = TimelinePanel(self.window_frame)
+        self.timeline_panel = TimelinePanel(
+            self.window_frame,
+            playback_controller=getattr(self.app_context, "playback_controller", None),
+        )
         self.right_dock = RightDock(self.window_frame)
         self.right_panel = RightPanel(self.window_frame)
         self.inspector_detail_pane = InspectorDetailPane(self.window_frame)

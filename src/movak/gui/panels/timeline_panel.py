@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QProgressBar, QStyle, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from ..components.panel import Panel
+from ..components.transport_bar import TransportBar
 from ..style.spacing import Spacing
 from ..timeline.timeline_viewport import TimelineViewport
 from ..timeline.tracks.spectrogram_track import SpectrogramTrack
@@ -13,7 +14,7 @@ from ..timeline.tracks.waveform_track import WaveformTrack
 class TimelinePanel(Panel):
     """Central timeline stack with placeholder spectrogram and tiers."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, playback_controller=None) -> None:
         super().__init__(
             "Editor",
             parent,
@@ -21,32 +22,10 @@ class TimelinePanel(Panel):
             eyebrow="Session",
         )
 
-        transport = QWidget(self.body)
-        transport_layout = QHBoxLayout(transport)
-        transport_layout.setContentsMargins(0, 0, 0, 0)
-        transport_layout.setSpacing(Spacing.SM)
-
-        current_state = QLabel("REC 01  •  Speaker A", transport)
-        current_state.setObjectName("sectionLabel")
-        transport_progress = QProgressBar(transport)
-        transport_progress.setRange(0, 100)
-        transport_progress.setValue(62)
-        transport_progress.setTextVisible(False)
-
-        focus_button = QPushButton(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaSeekForward), "Focus Region", transport)
-        focus_button.setObjectName("ghostButton")
-        analyze_button = QPushButton("Run Pass", transport)
-        analyze_button.setObjectName("primaryButton")
-
-        transport_layout.addWidget(current_state)
-        transport_layout.addWidget(transport_progress, 1)
-        transport_layout.addWidget(focus_button)
-        transport_layout.addWidget(analyze_button)
-
         shell = QWidget(self.body)
         shell.setObjectName("trackShell")
         shell_layout = QVBoxLayout(shell)
-        shell_layout.setContentsMargins(0, Spacing.SM, 0, 0)
+        shell_layout.setContentsMargins(0, 0, 0, 0)
         shell_layout.setSpacing(Spacing.SM)
 
         self.viewport = TimelineViewport(total_duration=12.0, parent=shell)
@@ -68,6 +47,7 @@ class TimelinePanel(Panel):
         footer.setObjectName("statCaption")
         shell_layout.addWidget(footer)
 
-        self.body_layout.addWidget(transport)
+        self.transport_bar = TransportBar(playback_controller=playback_controller, parent=self.body)
+
         self.body_layout.addWidget(shell, 1)
-        self.body_layout.addSpacing(Spacing.XS)
+        self.body_layout.addWidget(self.transport_bar)
