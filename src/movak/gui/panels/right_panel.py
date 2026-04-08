@@ -1,40 +1,34 @@
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
 import pyqtgraph as pg
+from PyQt6.QtWidgets import QLabel
+
+from ..components.panel import Panel
+from ..style.palette import Palette
 
 
-class RightPanel(QWidget):
-    """
-    Visualization panel for token-level plots.
-    """
+class RightPanel(Panel):
+    """Visualization placeholder area."""
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, parent=None) -> None:
+        super().__init__("Analysis", parent)
 
-        layout = QVBoxLayout()
-        self.setLayout(layout)
+        subtitle = QLabel("Embedding and token distribution views", self)
+        subtitle.setObjectName("panelSubtitle")
 
-        self.plot_widget = pg.PlotWidget()
+        self.plot_widget = pg.PlotWidget(self)
+        self.plot_widget.showGrid(x=True, y=True, alpha=0.15)
+        self.plot_widget.hideButtons()
+        self.plot_widget.setMenuEnabled(False)
 
-        layout.addWidget(self.plot_widget)
+        scatter = pg.ScatterPlotItem(
+            x=[0.1, 0.45, 0.9, 1.2, 1.55],
+            y=[1.2, 0.5, 1.5, 0.85, 1.1],
+            size=10,
+            brush=pg.mkBrush(Palette.ACCENT),
+            pen=pg.mkPen(Palette.ACCENT_STRONG, width=1.0),
+        )
+        self.plot_widget.addItem(scatter)
 
-        self.scatter = pg.ScatterPlotItem()
-
-        self.plot_widget.addItem(self.scatter)
-
-        self.scatter.sigClicked.connect(self._on_point_clicked)
-
-    def set_data(self, x, y, token_ids):
-        spots = [
-            {"pos": (xi, yi), "data": token_id}
-            for xi, yi, token_id in zip(x, y, token_ids)
-        ]
-
-        self.scatter.setData(spots)
-
-    def _on_point_clicked(self, plot, points):
-        token_id = points[0].data()
-
-        # should emit signal in full implementation
-        print("Jump to token:", token_id)
+        self.layout.addWidget(subtitle)
+        self.layout.addWidget(self.plot_widget, 1)

@@ -1,28 +1,33 @@
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTreeView
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QStandardItem, QStandardItemModel
+from PyQt6.QtWidgets import QLabel, QTreeView
+
+from ..components.panel import Panel
 
 
-class LeftPanel(QWidget):
-    """
-    Corpus navigation panel.
-    """
+class LeftPanel(Panel):
+    """Corpus navigation placeholder panel."""
 
-    recording_selected = pyqtSignal(str)
+    def __init__(self, parent=None) -> None:
+        super().__init__("Corpus", parent)
 
-    def __init__(self) -> None:
-        super().__init__()
+        subtitle = QLabel("Recordings and annotation sets", self)
+        subtitle.setObjectName("panelSubtitle")
 
-        layout = QVBoxLayout()
-        self.setLayout(layout)
+        self.tree = QTreeView(self)
+        self.tree.setHeaderHidden(True)
+        self.tree.setAlternatingRowColors(False)
 
-        self.tree = QTreeView()
+        model = QStandardItemModel(self.tree)
+        root = model.invisibleRootItem()
+        corpus = QStandardItem("Demo Corpus")
+        corpus.appendRow(QStandardItem("recording_001"))
+        corpus.appendRow(QStandardItem("recording_002"))
+        corpus.appendRow(QStandardItem("recording_003"))
+        root.appendRow(corpus)
+        self.tree.setModel(model)
+        self.tree.expandAll()
 
-        layout.addWidget(self.tree)
-
-        self.tree.clicked.connect(self._on_item_clicked)
-
-    def _on_item_clicked(self, index) -> None:
-        recording_id = str(index.data())
-        self.recording_selected.emit(recording_id)
+        self.layout.addWidget(subtitle)
+        self.layout.addWidget(self.tree, 1)

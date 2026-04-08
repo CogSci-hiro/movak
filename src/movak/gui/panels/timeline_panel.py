@@ -1,34 +1,34 @@
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt6.QtWidgets import QLabel
 
-from ..widgets.timeline_widget import TimelineWidget
-from ..widgets.spectrogram_widget import SpectrogramWidget
-from ..widgets.tier_widget import TierWidget
+from ..components.panel import Panel
+from ..style.spacing import Spacing
+from ..timeline.timeline_viewport import TimelineViewport
+from ..timeline.tracks.spectrogram_track import SpectrogramTrack
+from ..timeline.tracks.tier_track import TierTrack
+from ..timeline.tracks.waveform_track import WaveformTrack
 
 
-class TimelinePanel(QWidget):
-    """
-    Main timeline view panel.
-    """
+class TimelinePanel(Panel):
+    """Central timeline stack with placeholder spectrogram and tiers."""
 
-    def __init__(self, controller=None) -> None:
-        super().__init__()
+    def __init__(self, parent=None) -> None:
+        super().__init__("Editor", parent)
 
-        self.controller = controller
+        subtitle = QLabel("Timeline, spectrogram, and interval tiers", self)
+        subtitle.setObjectName("panelSubtitle")
 
-        layout = QVBoxLayout()
-        self.setLayout(layout)
+        self.viewport = TimelineViewport(total_duration=12.0, parent=self)
+        self.viewport.add_tracks(
+            [
+                WaveformTrack(parent=self.viewport),
+                SpectrogramTrack(parent=self.viewport),
+                TierTrack("Words", parent=self.viewport),
+                TierTrack("Phonemes", parent=self.viewport),
+            ]
+        )
 
-        self.timeline = TimelineWidget()
-        self.spectrogram = SpectrogramWidget()
-
-        layout.addWidget(self.spectrogram, 2)
-        layout.addWidget(self.timeline, 3)
-
-        self.tiers = []
-
-    def add_tier(self, tier_data) -> None:
-        tier = TierWidget(tier_data)
-        self.layout().addWidget(tier)
-        self.tiers.append(tier)
+        self.layout.addWidget(subtitle)
+        self.layout.addWidget(self.viewport, 1)
+        self.layout.addSpacing(Spacing.XS)
