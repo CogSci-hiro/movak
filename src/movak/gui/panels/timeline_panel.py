@@ -14,7 +14,7 @@ from ..timeline.tracks.waveform_track import WaveformTrack
 class TimelinePanel(Panel):
     """Central timeline stack with placeholder spectrogram and tiers."""
 
-    def __init__(self, parent=None, playback_controller=None) -> None:
+    def __init__(self, parent=None) -> None:
         super().__init__(
             "Editor",
             parent,
@@ -29,10 +29,12 @@ class TimelinePanel(Panel):
         shell_layout.setSpacing(Spacing.SM)
 
         self.viewport = TimelineViewport(total_duration=12.0, parent=shell)
+        self.waveform_track = WaveformTrack(parent=self.viewport)
+        self.spectrogram_track = SpectrogramTrack(parent=self.viewport)
         self.viewport.add_tracks(
             [
-                WaveformTrack(parent=self.viewport),
-                SpectrogramTrack(parent=self.viewport),
+                self.waveform_track,
+                self.spectrogram_track,
                 TierTrack("Words", parent=self.viewport),
                 TierTrack("Phonemes", parent=self.viewport),
             ]
@@ -41,13 +43,13 @@ class TimelinePanel(Panel):
         shell_layout.addWidget(self.viewport, 1)
 
         footer = QLabel(
-            "Shift + mouse wheel pans horizontally. Mouse wheel zooms the shared timeline.",
+            "Pinch or mouse wheel zooms. Drag pans horizontally. The bottom scrollbar shifts the visible timeline.",
             shell,
         )
         footer.setObjectName("statCaption")
         shell_layout.addWidget(footer)
 
-        self.transport_bar = TransportBar(playback_controller=playback_controller, parent=self.body)
+        self.transport_bar = TransportBar(parent=self.body)
 
         self.body_layout.addWidget(shell, 1)
         self.body_layout.addWidget(self.transport_bar)

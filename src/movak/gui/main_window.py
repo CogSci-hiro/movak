@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import sys
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QAction, QCloseEvent, QShowEvent
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStyle, QVBoxLayout, QWidget
 
+from ..app.session_manager import SessionManager
+from ..audio.playback import AudioPlaybackService
+from ..audio.waveform_cache import WaveformCache
 from .app_context import AppContext
+from .controllers.navigation_controller import NavigationController
+from .controllers.playback_controller import PlaybackController
 from .components.left_dock import LeftDock, LeftPaneSpec
 from .components.macos_window import apply_integrated_macos_chrome
 from .components.modern_splitter import ModernSplitter
@@ -21,22 +27,43 @@ from .style.theme import apply_theme
 class MainWindow(QMainWindow):
     """Main IDE-like window composed from thin GUI placeholders."""
 
-    def __init__(self, app_context: AppContext | None = None) -> None:
+    session_state_changed = pyqtSignal()
+    DEFAULT_BOTTOM_TOOL_ID = "review_panel"
+
+    def __init__(
+        self,
+        app_context: AppContext | None = None,
+        session_manager: SessionManager | None = None,
+    ) -> None:
         super().__init__()
         self.app_context = app_context or AppContext()
+        self.session_manager = session_manager or SessionManager(parent=self)
         self._active_left_pane_id: str | None = "corpus"
         self._active_right_pane_id: str | None = "analysis"
+        self._active_bottom_tool_id: str | None = self.DEFAULT_BOTTOM_TOOL_ID
+        self._is_bottom_panel_visible = True
         self._macos_chrome_applied = False
 
         app = QApplication.instance()
         if app is not None:
             apply_theme(app)
 
+        self.playback_service = AudioPlaybackService(self)
+        self.waveform_cache = WaveformCache()
+        self.playback_controller: PlaybackController | None = None
+        self.navigation_controller: NavigationController | None = None
+
         self.setWindowTitle("Movak")
         self.setMinimumSize(960, 640)
         self.resize(1600, 980)
         self._configure_native_chrome()
         self._build_ui()
+        self._configure_playback()
+        self._configure_navigation()
+        self._configure_menu_bar()
+        self.statusBar().showMessage("Ready", 2_000)
+        self.session_manager.attach(self)
+        self.session_manager.restore(self)
 
     def _configure_native_chrome(self) -> None:
         if sys.platform == "darwin":
@@ -71,7 +98,6 @@ class MainWindow(QMainWindow):
         self.export_pane = ExportPane(self.window_frame)
         self.timeline_panel = TimelinePanel(
             self.window_frame,
-            playback_controller=getattr(self.app_context, "playback_controller", None),
         )
         self.right_dock = RightDock(self.window_frame)
         self.right_panel = RightPanel(self.window_frame)
@@ -101,14 +127,78 @@ class MainWindow(QMainWindow):
         frame_layout.addWidget(self.shell_splitter, 1)
         layout.addWidget(self.window_frame, 1)
 
-        self._apply_left_pane_state(self._active_left_pane_id)
-        self._apply_right_pane_state(self._active_right_pane_id)
+        self.apply_left_panel_state(self._active_left_pane_id)
+        self.apply_right_panel_state(self._active_right_pane_id)
 
-    def showEvent(self, event) -> None:
+    def _configure_playback(self) -> None:
+        self.playback_controller = PlaybackController(
+            self.playback_service,
+            self.timeline_panel.transport_bar,
+            self.waveform_cache,
+            self.timeline_panel.waveform_track,
+            self.timeline_panel.spectrogram_track,
+            self.timeline_panel.viewport,
+            dialog_parent=self,
+            status_message_sink=self.statusBar().showMessage,
+        )
+        self.app_context.controllers["playback"] = self.playback_controller
+        self.app_context.playback_controller = self.playback_controller
+
+    def _configure_navigation(self) -> None:
+        self.navigation_controller = NavigationController(self.timeline_panel.viewport, self.playback_service)
+        self.timeline_panel.transport_bar.fit_requested.connect(self.navigation_controller.fit_to_audio)
+        self.timeline_panel.transport_bar.center_on_playhead_requested.connect(self.navigation_controller.center_on_playhead)
+        self.app_context.controllers["navigation"] = self.navigation_controller
+        self.app_context.navigation_controller = self.navigation_controller
+
+    def _configure_menu_bar(self) -> None:
+        file_menu = self.menuBar().addMenu("&File")
+        open_audio_action = QAction("Open audio...", self)
+        open_audio_action.setShortcut("Ctrl+O")
+        open_audio_action.triggered.connect(self._open_audio_file)
+        file_menu.addAction(open_audio_action)
+
+        view_menu = self.menuBar().addMenu("&View")
+        fit_action = QAction("Fit to File", self)
+        fit_action.setShortcut("F")
+        fit_action.triggered.connect(self._fit_to_file)
+        view_menu.addAction(fit_action)
+
+        center_action = QAction("Center on Playhead", self)
+        center_action.setShortcut("C")
+        center_action.triggered.connect(self._center_on_playhead)
+        view_menu.addAction(center_action)
+
+        self.toggle_bottom_panel_action = QAction("Show Review Panel", self)
+        self.toggle_bottom_panel_action.setCheckable(True)
+        self.toggle_bottom_panel_action.setChecked(True)
+        self.toggle_bottom_panel_action.toggled.connect(self.set_bottom_panel_visible)
+        view_menu.addAction(self.toggle_bottom_panel_action)
+
+    def _open_audio_file(self) -> None:
+        if self.playback_controller is None:
+            return
+        self.playback_controller.open_audio_file()
+
+    def _fit_to_file(self) -> None:
+        if self.navigation_controller is None:
+            return
+        self.navigation_controller.fit_to_audio()
+
+    def _center_on_playhead(self) -> None:
+        if self.navigation_controller is None:
+            return
+        self.navigation_controller.center_on_playhead()
+
+    def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
         if sys.platform == "darwin" and not self._macos_chrome_applied:
             apply_integrated_macos_chrome(self)
             self._macos_chrome_applied = True
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        self.session_manager.save(self)
+        super().closeEvent(event)
 
     def _configure_left_dock(self) -> None:
         style = self.style()
@@ -120,7 +210,13 @@ class MainWindow(QMainWindow):
         )
         for spec in pane_specs:
             self.left_dock.add_pane(spec)
+        self.left_dock.add_bottom_tool(
+            self.DEFAULT_BOTTOM_TOOL_ID,
+            style.standardIcon(QStyle.StandardPixmap.SP_FileDialogListView),
+            "Review",
+        )
         self.left_dock.pane_requested.connect(self._toggle_left_pane)
+        self.left_dock.bottom_tool_requested.connect(self._toggle_bottom_tool)
 
     def _configure_right_dock(self) -> None:
         style = self.style()
@@ -134,21 +230,83 @@ class MainWindow(QMainWindow):
 
     def _toggle_left_pane(self, pane_id: str) -> None:
         next_pane_id = None if self._active_left_pane_id == pane_id else pane_id
-        self._apply_left_pane_state(next_pane_id)
+        self.apply_left_panel_state(next_pane_id)
 
-    def _apply_left_pane_state(self, pane_id: str | None) -> None:
+    @property
+    def active_left_pane_id(self) -> str | None:
+        """Return the currently expanded left pane identifier."""
+
+        return self._active_left_pane_id
+
+    @property
+    def active_right_pane_id(self) -> str | None:
+        """Return the currently expanded right pane identifier."""
+
+        return self._active_right_pane_id
+
+    def apply_left_panel_state(self, pane_id: str | None) -> None:
+        """Apply the requested left pane state and notify persistence."""
+
         self._active_left_pane_id = pane_id
         self.left_dock.set_active_pane(pane_id)
         self._update_shell_sizes()
+        self.session_state_changed.emit()
 
     def _toggle_right_pane(self, pane_id: str) -> None:
         next_pane_id = None if self._active_right_pane_id == pane_id else pane_id
-        self._apply_right_pane_state(next_pane_id)
+        self.apply_right_panel_state(next_pane_id)
 
-    def _apply_right_pane_state(self, pane_id: str | None) -> None:
+    def apply_right_panel_state(self, pane_id: str | None) -> None:
+        """Apply the requested right pane state and notify persistence."""
+
         self._active_right_pane_id = pane_id
         self.right_dock.set_active_pane(pane_id)
         self._update_shell_sizes()
+        self.session_state_changed.emit()
+
+    def _toggle_bottom_tool(self, tool_id: str) -> None:
+        next_tool_id = None if self._is_bottom_panel_visible and self._active_bottom_tool_id == tool_id else tool_id
+        self.apply_bottom_tool_state(next_tool_id)
+
+    def apply_bottom_tool_state(self, tool_id: str | None) -> None:
+        """Apply the requested bottom tool state while preserving splitter behavior."""
+
+        self._active_bottom_tool_id = tool_id
+        self.left_dock.set_active_bottom_tool(tool_id if tool_id is not None and self._is_bottom_panel_visible else None)
+        self.set_bottom_panel_visible(tool_id is not None)
+
+    def set_bottom_panel_visible(self, visible: bool) -> None:
+        """Show or hide the bottom review panel.
+
+        Notes
+        -----
+        The session manager restores this before splitter sizes so the splitter
+        snapshot can safely reapply the correct visible or collapsed heights.
+        """
+
+        if visible and self._active_bottom_tool_id is None:
+            self._active_bottom_tool_id = self.DEFAULT_BOTTOM_TOOL_ID
+
+        self._is_bottom_panel_visible = visible
+        self.bottom_panel.setVisible(visible)
+        self.left_dock.set_active_bottom_tool(self._active_bottom_tool_id if visible else None)
+        self.toggle_bottom_panel_action.blockSignals(True)
+        self.toggle_bottom_panel_action.setChecked(visible)
+        self.toggle_bottom_panel_action.blockSignals(False)
+
+        if visible:
+            current_sizes = self.content_splitter.sizes()
+            restored_top_size = current_sizes[0] if len(current_sizes) > 1 and current_sizes[0] > 0 else 720
+            restored_bottom_size = current_sizes[1] if len(current_sizes) > 1 and current_sizes[1] > 0 else 230
+            self.content_splitter.setSizes([restored_top_size, restored_bottom_size])
+        else:
+            self.content_splitter.setSizes([max(self.content_splitter.height(), 1), 0])
+        self.session_state_changed.emit()
+
+    def is_bottom_panel_visible(self) -> bool:
+        """Return whether the bottom review panel is visible."""
+
+        return self._is_bottom_panel_visible
 
     def _update_shell_sizes(self) -> None:
         total_width = max(self.shell_splitter.width(), 1_500)
