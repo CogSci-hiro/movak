@@ -21,6 +21,8 @@ class TransportBar(QFrame):
     fit_requested = pyqtSignal()
     center_on_playhead_requested = pyqtSignal()
     waveform_display_mode_requested = pyqtSignal(str)
+    loop_toggled = pyqtSignal(bool)
+    playback_rate_requested = pyqtSignal(float)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -53,9 +55,13 @@ class TransportBar(QFrame):
         self.rate_label = QLabel("Speed", self)
         self.rate_label.setObjectName("statCaption")
         self.rate_combo = QComboBox(self)
-        self.rate_combo.addItems(["0.5x", "1.0x", "1.25x", "1.5x", "2.0x"])
+        self.rate_combo.addItem("0.5x", userData=0.5)
+        self.rate_combo.addItem("1.0x", userData=1.0)
+        self.rate_combo.addItem("1.25x", userData=1.25)
+        self.rate_combo.addItem("1.5x", userData=1.5)
+        self.rate_combo.addItem("2.0x", userData=2.0)
         self.rate_combo.setCurrentText("1.0x")
-        self.rate_combo.setEnabled(False)
+        self.rate_combo.setEnabled(True)
 
         self.waveform_mode_label = QLabel("Waveform", self)
         self.waveform_mode_label.setObjectName("statCaption")
@@ -100,8 +106,10 @@ class TransportBar(QFrame):
         self.open_button.clicked.connect(self.open_requested.emit)
         self.play_button.clicked.connect(self.play_pause_requested.emit)
         self.stop_button.clicked.connect(self.stop_requested.emit)
+        self.loop_button.toggled.connect(self.loop_toggled.emit)
         self.fit_button.clicked.connect(self.fit_requested.emit)
         self.focus_button.clicked.connect(self.center_on_playhead_requested.emit)
+        self.rate_combo.currentIndexChanged.connect(self._emit_playback_rate_changed)
         self.waveform_mode_combo.currentIndexChanged.connect(self._emit_waveform_mode_changed)
 
         self.set_is_playing(False)
@@ -158,5 +166,27 @@ class TransportBar(QFrame):
         selected_mode = self.waveform_mode_combo.currentData()
         return selected_mode if selected_mode in {MONO_MODE, STEREO_MODE} else MONO_MODE
 
+    def is_loop_enabled(self) -> bool:
+        """Return whether loop playback is enabled."""
+        return self.loop_button.isChecked()
+
+    def current_playback_rate(self) -> float:
+        """Return the selected playback rate multiplier."""
+        selected_rate = self.rate_combo.currentData()
+        return float(selected_rate) if isinstance(selected_rate, int | float) else 1.0
+
+    def set_playback_rate(self, playback_rate: float) -> None:
+        """Update the selected playback rate."""
+        current_rate = self.current_playback_rate()
+        if abs(current_rate - playback_rate) <= 1e-6:
+            return
+        blocker = QSignalBlocker(self.rate_combo)
+        index = self.rate_combo.findData(playback_rate)
+        self.rate_combo.setCurrentIndex(index if index >= 0 else self.rate_combo.findData(1.0))
+        del blocker
+
     def _emit_waveform_mode_changed(self) -> None:
         self.waveform_display_mode_requested.emit(self.current_waveform_display_mode())
+
+    def _emit_playback_rate_changed(self) -> None:
+        self.playback_rate_requested.emit(self.current_playback_rate())

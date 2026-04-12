@@ -22,6 +22,8 @@ class TimelineViewport(QWidget):
     """Shared timeline viewport that coordinates time axis, tracks, and scrollbar."""
 
     time_selected = pyqtSignal(float)
+    cursor_time_changed = pyqtSignal(float)
+    visible_range_changed = pyqtSignal(float, float)
 
     def __init__(self, total_duration: float = 30.0, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -137,6 +139,7 @@ class TimelineViewport(QWidget):
                 track.set_time_range(clamped_start, clamped_end)
         finally:
             self._synchronizing_range = False
+        self.visible_range_changed.emit(clamped_start, clamped_end)
         self._update_scrollbar()
 
     def set_visible_range(self, start_time: float, end_time: float) -> None:
@@ -154,9 +157,27 @@ class TimelineViewport(QWidget):
 
     def set_cursor_time(self, cursor_time: float) -> None:
         """Move the vertical playback cursor across all tracks."""
-        self.cursor_time = min(max(cursor_time, 0.0), self.total_duration)
+        clamped_cursor_time = min(max(cursor_time, 0.0), self.total_duration)
+        if abs(clamped_cursor_time - self.cursor_time) <= RANGE_TOLERANCE_SECONDS:
+            return
+
+        self._ensure_cursor_visible(clamped_cursor_time)
+        self.cursor_time = clamped_cursor_time
         for track in self.tracks:
             track.set_cursor_time(self.cursor_time)
+        self.cursor_time_changed.emit(self.cursor_time)
+
+    def _ensure_cursor_visible(self, cursor_time: float) -> None:
+        """Pan the visible window just enough to keep the cursor on-screen."""
+        if self.visible_start_time - RANGE_TOLERANCE_SECONDS <= cursor_time <= self.visible_end_time + RANGE_TOLERANCE_SECONDS:
+            return
+
+        visible_duration = self.visible_end_time - self.visible_start_time
+        if cursor_time < self.visible_start_time:
+            self.set_visible_time_range(cursor_time, cursor_time + visible_duration)
+            return
+
+        self.set_visible_time_range(cursor_time - visible_duration, cursor_time)
 
     def _handle_time_clicked(self, time_s: float) -> None:
         clamped_time = min(max(time_s, 0.0), self.total_duration)

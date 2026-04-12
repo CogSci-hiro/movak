@@ -3,19 +3,21 @@ from __future__ import annotations
 import sys
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QAction, QCloseEvent, QShowEvent
+from PyQt6.QtGui import QAction, QCloseEvent, QKeySequence, QShowEvent
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStyle, QVBoxLayout, QWidget
 
 from ..app.session_manager import SessionManager
 from ..audio.playback import AudioPlaybackService
 from ..audio.waveform_cache import WaveformCache
 from .app_context import AppContext
+from .controllers.analysis_inspector_controller import AnalysisInspectorController
 from .controllers.navigation_controller import NavigationController
 from .controllers.playback_controller import PlaybackController
 from .components.left_dock import LeftDock, LeftPaneSpec
 from .components.macos_window import apply_integrated_macos_chrome
 from .components.modern_splitter import ModernSplitter
 from .components.right_dock import RightDock, RightPaneSpec
+from .components.settings_dialog import SettingsDialog
 from .panels.bottom_panel import BottomPanel
 from .panels.left_panel import ExportPane, LeftPanel, ReviewQueuePane, SearchPane
 from .panels.right_panel import InspectorDetailPane, RightPanel
@@ -52,6 +54,7 @@ class MainWindow(QMainWindow):
         self.waveform_cache = WaveformCache()
         self.playback_controller: PlaybackController | None = None
         self.navigation_controller: NavigationController | None = None
+        self.analysis_inspector_controller: AnalysisInspectorController | None = None
 
         self.setWindowTitle("Movak")
         self.setMinimumSize(960, 640)
@@ -60,6 +63,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._configure_playback()
         self._configure_navigation()
+        self._configure_analysis_inspector()
         self._configure_menu_bar()
         self.statusBar().showMessage("Ready", 2_000)
         self.session_manager.attach(self)
@@ -151,12 +155,31 @@ class MainWindow(QMainWindow):
         self.app_context.controllers["navigation"] = self.navigation_controller
         self.app_context.navigation_controller = self.navigation_controller
 
+    def _configure_analysis_inspector(self) -> None:
+        self.analysis_inspector_controller = AnalysisInspectorController(
+            self.waveform_cache,
+            self.timeline_panel.viewport,
+            self.timeline_panel.transport_bar,
+            self.right_panel,
+        )
+        if self.playback_controller is not None:
+            self.playback_controller.audio_file_loaded.connect(
+                lambda _path: self.analysis_inspector_controller.refresh(self.timeline_panel.viewport.cursor_time)
+            )
+
     def _configure_menu_bar(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
         open_audio_action = QAction("Open audio...", self)
         open_audio_action.setShortcut("Ctrl+O")
         open_audio_action.triggered.connect(self._open_audio_file)
         file_menu.addAction(open_audio_action)
+
+        edit_menu = self.menuBar().addMenu("&Edit")
+        self.settings_action = QAction("Settings...", self)
+        self.settings_action.setMenuRole(QAction.MenuRole.PreferencesRole)
+        self.settings_action.setShortcut(QKeySequence.StandardKey.Preferences)
+        self.settings_action.triggered.connect(self._open_settings_dialog)
+        edit_menu.addAction(self.settings_action)
 
         view_menu = self.menuBar().addMenu("&View")
         fit_action = QAction("Fit to File", self)
@@ -189,6 +212,15 @@ class MainWindow(QMainWindow):
         if self.navigation_controller is None:
             return
         self.navigation_controller.center_on_playhead()
+
+    def _open_settings_dialog(self) -> None:
+        dialog = SettingsDialog(
+            reopen_last_audio_on_launch=self.session_manager.reopen_last_audio_on_launch(),
+            parent=self,
+        )
+        if dialog.exec() != SettingsDialog.DialogCode.Accepted:
+            return
+        self.session_manager.set_reopen_last_audio_on_launch(dialog.reopen_last_audio_on_launch())
 
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)

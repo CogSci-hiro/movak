@@ -30,6 +30,7 @@ class TimeAxis(QWidget):
         super().__init__(parent)
         self.visible_start_time = 0.0
         self.visible_end_time = 10.0
+        self.selected_time: float | None = None
         self.view_box = TimelineViewBox()
 
         self.plot_widget = TimelinePlotWidget(self.view_box, parent=self)
@@ -83,6 +84,12 @@ class TimeAxis(QWidget):
             maxXRange=maximum_duration,
         )
 
+    def set_selected_time(self, time_seconds: float | None) -> None:
+        """Show a precise selected time marker on the x-axis."""
+
+        self.selected_time = time_seconds
+        self._update_ticks()
+
     def _update_ticks(self) -> None:
         """Recompute major ticks for the current visible range."""
 
@@ -98,6 +105,17 @@ class TimeAxis(QWidget):
             if tick_time >= self.visible_start_time - tick_step:
                 major_ticks.append((tick_time, _format_time_label(tick_time)))
             tick_time += tick_step
+
+        if self.selected_time is not None:
+            selected_label = f"[{self.selected_time:.3f}s]"
+            if not any(abs(tick_value - self.selected_time) < 1e-6 for tick_value, _ in major_ticks):
+                major_ticks.append((self.selected_time, selected_label))
+            else:
+                major_ticks = [
+                    (tick_value, selected_label if abs(tick_value - self.selected_time) < 1e-6 else label)
+                    for tick_value, label in major_ticks
+                ]
+            major_ticks.sort(key=lambda item: item[0])
 
         axis.setTicks([major_ticks])
 

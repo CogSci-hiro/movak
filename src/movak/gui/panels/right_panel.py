@@ -1,101 +1,76 @@
 from __future__ import annotations
 
-import pyqtgraph as pg
-from PyQt6.QtWidgets import QFormLayout, QGridLayout, QLabel, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QFormLayout, QLabel, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 
+from ...features.analysis_inspector import AnalysisSnapshot
 from ..components.panel import Panel
-from ..style.palette import Palette
+from ..components.modern_splitter import ModernSplitter
 from ..style.spacing import Spacing
+from ..widgets.analysis_plot_widgets import FormantSpacePlotWidget, PsdPlotWidget
 
 
 class RightPanel(Panel):
-    """Visualization placeholder area."""
+    """Cursor-centered analysis inspector for the active audio file."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(
             "Analysis",
             parent,
-            subtitle="Embeddings, confidence metrics, and token distribution",
+            subtitle="Formant space and power spectral density around the current cursor",
             eyebrow="Inspector",
         )
 
-        metrics = QWidget(self.body)
-        metrics_layout = QGridLayout(metrics)
-        metrics_layout.setContentsMargins(0, 0, 0, 0)
-        metrics_layout.setHorizontalSpacing(Spacing.SM)
-        metrics_layout.setVerticalSpacing(Spacing.SM)
+        summary_label = QLabel(
+            "The plots below use a short analysis window centered on the current cursor/playhead position.",
+            self.body,
+        )
+        summary_label.setWordWrap(True)
+        summary_label.setObjectName("statCaption")
 
-        for index, (value, label) in enumerate(
-            (
-                ("98.4%", "Alignment"),
-                ("12", "Flags"),
-                ("4.2h", "Reviewed"),
-                ("18", "Pending"),
+        self.placeholder_label = QLabel(self.body)
+        self.placeholder_label.setWordWrap(True)
+        self.placeholder_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.placeholder_label.setObjectName("emptyStateText")
+
+        self.formant_plot_widget = FormantSpacePlotWidget(self.body)
+        self.psd_plot_widget = PsdPlotWidget(self.body)
+
+        self.plot_splitter = ModernSplitter(Qt.Orientation.Vertical, self.body)
+        self.plot_splitter.addWidget(self.formant_plot_widget)
+        self.plot_splitter.addWidget(self.psd_plot_widget)
+        self.plot_splitter.setStretchFactor(0, 1)
+        self.plot_splitter.setStretchFactor(1, 1)
+        self.plot_splitter.setSizes([280, 280])
+
+        self.body_layout.addWidget(summary_label)
+        self.body_layout.addWidget(self.placeholder_label)
+        self.body_layout.addWidget(self.plot_splitter, 1)
+
+        self.show_placeholder_state("Load audio to inspect formants and PSD around the cursor.")
+
+    def set_analysis_snapshot(self, snapshot: AnalysisSnapshot) -> None:
+        """Render the latest cursor-centered analysis results."""
+
+        self.placeholder_label.setVisible(False)
+        if snapshot.channel_formants:
+            self.formant_plot_widget.set_formant_points(
+                snapshot.channel_formants,
+                snapshot.channel_formant_confidences,
             )
-        ):
-            card = QWidget(metrics)
-            card.setObjectName("metricCard")
-            card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(Spacing.SM, Spacing.SM, Spacing.SM, Spacing.SM)
-            card_layout.setSpacing(Spacing.XXS)
+        else:
+            self.formant_plot_widget.set_formant_point(snapshot.formant, snapshot.formant_confidence)
+        self.psd_plot_widget.set_psd(snapshot.psd, snapshot.formant_frequencies_hz)
 
-            value_label = QLabel(value, card)
-            value_label.setObjectName("metricValue")
-            text_label = QLabel(label, card)
-            text_label.setObjectName("metricLabel")
+    def show_placeholder_state(self, message: str) -> None:
+        """Show a lightweight empty state while keeping the plots stable."""
 
-            card_layout.addWidget(value_label)
-            card_layout.addWidget(text_label)
-            metrics_layout.addWidget(card, index // 2, index % 2)
-
-        plot_frame = QWidget(self.body)
-        plot_layout = QVBoxLayout(plot_frame)
-        plot_layout.setContentsMargins(0, Spacing.SM, 0, 0)
-        plot_layout.setSpacing(Spacing.SM)
-
-        plot_label = QLabel("Embedding Projection", plot_frame)
-        plot_label.setObjectName("sectionLabel")
-
-        self.plot_widget = pg.PlotWidget(plot_frame)
-        self.plot_widget.showGrid(x=True, y=True, alpha=0.15)
-        self.plot_widget.hideButtons()
-        self.plot_widget.setMenuEnabled(False)
-        self.plot_widget.setBackground(Palette.PANEL)
-        self.plot_widget.getPlotItem().getAxis("bottom").setPen(pg.mkPen(Palette.TEXT_DIM))
-        self.plot_widget.getPlotItem().getAxis("left").setPen(pg.mkPen(Palette.TEXT_DIM))
-        self.plot_widget.getPlotItem().getAxis("bottom").setTextPen(pg.mkPen(Palette.TEXT_MUTED))
-        self.plot_widget.getPlotItem().getAxis("left").setTextPen(pg.mkPen(Palette.TEXT_MUTED))
-
-        scatter = pg.ScatterPlotItem(
-            x=[0.1, 0.45, 0.9, 1.2, 1.55],
-            y=[1.2, 0.5, 1.5, 0.85, 1.1],
-            size=12,
-            brush=pg.mkBrush(Palette.ACCENT),
-            pen=pg.mkPen(Palette.ACCENT_VIOLET, width=1.2),
-        )
-        self.plot_widget.addItem(scatter)
-
-        plot_layout.addWidget(plot_label)
-        plot_layout.addWidget(self.plot_widget, 1)
-
-        status_frame = QWidget(self.body)
-        status_layout = QVBoxLayout(status_frame)
-        status_layout.setContentsMargins(0, Spacing.SM, 0, 0)
-        status_layout.setSpacing(Spacing.XS)
-        status_title = QLabel("Model Status", status_frame)
-        status_title.setObjectName("sectionLabel")
-        status_copy = QLabel(
-            "Confidence overlays and embedding panels are ready. Select an interval to reveal detailed diagnostics here.",
-            status_frame,
-        )
-        status_copy.setWordWrap(True)
-        status_copy.setObjectName("emptyStateText")
-        status_layout.addWidget(status_title)
-        status_layout.addWidget(status_copy)
-
-        self.body_layout.addWidget(metrics)
-        self.body_layout.addWidget(plot_frame, 1)
-        self.body_layout.addWidget(status_frame)
+        self.placeholder_label.setText(message)
+        self.placeholder_label.setVisible(True)
+        self.formant_plot_widget.clear_plot()
+        self.psd_plot_widget.clear_plot()
+        self.formant_plot_widget.set_state_message(message)
+        self.psd_plot_widget.set_state_message(message)
 
 
 class InspectorDetailPane(Panel):

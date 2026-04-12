@@ -11,6 +11,7 @@ from .state import AppState, deserialize_app_state, serialize_app_state
 SAVE_DEBOUNCE_MS = 150
 SETTINGS_ORGANIZATION = "Movak"
 SETTINGS_APPLICATION = "Movak"
+REOPEN_LAST_AUDIO_ON_LAUNCH_KEY = "preferences/reopen_last_audio_on_launch"
 
 
 class SessionManager(QObject):
@@ -78,7 +79,7 @@ class SessionManager(QObject):
             self._restore_main_window_state(main_window, state)
             self._restore_global_ui_preferences(main_window, state)
 
-            if state.last_opened_file and Path(state.last_opened_file).exists():
+            if self.reopen_last_audio_on_launch() and state.last_opened_file and Path(state.last_opened_file).exists():
                 if not main_window.playback_controller.open_audio_path(state.last_opened_file):
                     self._pending_file_view_state = None
             else:
@@ -140,6 +141,24 @@ class SessionManager(QObject):
         if self._is_restoring_state or self._main_window is None:
             return
         self._save_timer.start()
+
+    def reopen_last_audio_on_launch(self) -> bool:
+        """Return whether launch should reopen the most recently opened audio file."""
+
+        raw_value = self.settings.value(REOPEN_LAST_AUDIO_ON_LAUNCH_KEY, True)
+        if isinstance(raw_value, bool):
+            return raw_value
+        if isinstance(raw_value, str):
+            return raw_value.strip().lower() not in {"0", "false", "no", "off"}
+        if isinstance(raw_value, int):
+            return bool(raw_value)
+        return True
+
+    def set_reopen_last_audio_on_launch(self, enabled: bool) -> None:
+        """Persist whether launch should reopen the most recently opened audio file."""
+
+        self.settings.setValue(REOPEN_LAST_AUDIO_ON_LAUNCH_KEY, enabled)
+        self.settings.sync()
 
     def _read_state(self) -> AppState:
         """Load the complete persisted state from settings."""

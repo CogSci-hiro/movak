@@ -38,7 +38,7 @@ class TimelineTrack(QWidget):
         self.timeline_viewport: TimelineViewport | None = None
         self.visible_start_time = 0.0
         self.visible_end_time = 10.0
-        self.view_box = TimelineViewBox()
+        self.view_box = self._create_view_box()
 
         self.plot_widget = TimelinePlotWidget(self.view_box, parent=self)
         self.plot_widget.setBackground((0, 0, 0, 0))
@@ -68,6 +68,11 @@ class TimelineTrack(QWidget):
 
         self.setMinimumHeight(TRACK_MINIMUM_HEIGHT)
         self.setAutoFillBackground(False)
+
+    def _create_view_box(self) -> TimelineViewBox:
+        """Create the view box used by this track."""
+
+        return TimelineViewBox()
 
     def attach_viewport(self, timeline_viewport: "TimelineViewport") -> None:
         """Attach the track to the shared timeline viewport.

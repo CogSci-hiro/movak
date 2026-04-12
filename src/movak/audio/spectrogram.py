@@ -11,6 +11,11 @@ PRAAT_DEFAULT_TIME_STEP_S = 0.002
 PRAAT_DEFAULT_MAX_FREQUENCY_HZ = 5_000.0
 PRAAT_DEFAULT_DYNAMIC_RANGE_DB = 50.0
 PRAAT_DEFAULT_PREEMPHASIS_FROM_HZ = 50.0
+PRAAT_DEFAULT_SHOW_FORMANTS = False
+PRAAT_DEFAULT_MAX_NUMBER_OF_FORMANTS = 5
+PRAAT_DEFAULT_FORMANT_MAX_FREQUENCY_HZ = 5_500.0
+PRAAT_DEFAULT_FORMANT_WINDOW_LENGTH_S = 0.025
+PRAAT_DEFAULT_FORMANT_PREEMPHASIS_FROM_HZ = 50.0
 MIN_FRAME_SIZE = 64
 MIN_DISPLAY_FFT_SIZE = 1_024
 EPSILON = 1e-12
@@ -25,6 +30,11 @@ class SpectrogramSettings:
     max_frequency_hz: float = PRAAT_DEFAULT_MAX_FREQUENCY_HZ
     dynamic_range_db: float = PRAAT_DEFAULT_DYNAMIC_RANGE_DB
     preemphasis_from_hz: float = PRAAT_DEFAULT_PREEMPHASIS_FROM_HZ
+    show_formants: bool = PRAAT_DEFAULT_SHOW_FORMANTS
+    max_number_of_formants: int = PRAAT_DEFAULT_MAX_NUMBER_OF_FORMANTS
+    formant_max_frequency_hz: float = PRAAT_DEFAULT_FORMANT_MAX_FREQUENCY_HZ
+    formant_window_length_s: float = PRAAT_DEFAULT_FORMANT_WINDOW_LENGTH_S
+    formant_preemphasis_from_hz: float = PRAAT_DEFAULT_FORMANT_PREEMPHASIS_FROM_HZ
 
 
 @dataclass(slots=True)
@@ -59,6 +69,11 @@ def build_spectrogram(
         max_frequency_hz=max_frequency_hz,
         dynamic_range_db=dynamic_range_db,
         preemphasis_from_hz=preemphasis_from_hz,
+        show_formants=PRAAT_DEFAULT_SHOW_FORMANTS,
+        max_number_of_formants=PRAAT_DEFAULT_MAX_NUMBER_OF_FORMANTS,
+        formant_max_frequency_hz=PRAAT_DEFAULT_FORMANT_MAX_FREQUENCY_HZ,
+        formant_window_length_s=PRAAT_DEFAULT_FORMANT_WINDOW_LENGTH_S,
+        formant_preemphasis_from_hz=PRAAT_DEFAULT_FORMANT_PREEMPHASIS_FROM_HZ,
     )
 
     mono_samples = np.asarray(samples, dtype=np.float32).reshape(-1)

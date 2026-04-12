@@ -17,6 +17,7 @@ dependencies = [
   "pandas",
   "pyqt6",
   "pyqtgraph",
+  "praat-parselmouth",
   "soundfile",
   "sounddevice",
   "pytest",
